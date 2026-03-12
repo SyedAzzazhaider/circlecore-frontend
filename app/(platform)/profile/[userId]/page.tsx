@@ -52,7 +52,7 @@ export default function ProfilePage() {
     setLoading(true);
     profileApi.getMyProfile()
       .then(function(res) {
-        var body = res.data as { data: { profile: BackendProfile } };
+var body = res.data as unknown as { data: { profile: BackendProfile } };
         setProfile(body.data.profile);
       })
       .catch(function(err) { setError(getErrorMessage(err)); })

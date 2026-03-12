@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import type { KeyboardEvent, ClipboardEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ShieldCheck, ArrowLeft } from "lucide-react";
@@ -11,7 +11,7 @@ import { useAuthStore }    from "@/lib/store/auth.store";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
-export default function TwoFactorPage() {
+function TwoFactorContent() {
   var params      = useSearchParams();
   var router      = useRouter();
   var { setAuth } = useAuthStore();
@@ -76,7 +76,6 @@ export default function TwoFactorPage() {
         Enter the 6-digit code from<br />your authenticator app.
       </p>
 
-      {/* OTP inputs — all keyboard/paste logic identical */}
       <div className="flex gap-2.5 justify-center mb-4">
         {digits.map(function(d, i) {
           return (
@@ -108,7 +107,6 @@ export default function TwoFactorPage() {
         })}
       </div>
 
-      {/* Progress bar */}
       <div className="h-0.5 bg-white/8 rounded-full mb-5 mx-6 overflow-hidden">
         <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-300"
           style={{ width: ((filled / 6) * 100) + "%" }} />
@@ -129,5 +127,13 @@ export default function TwoFactorPage() {
         <ArrowLeft size={11} />Back to sign in
       </Link>
     </div>
+  );
+}
+
+export default function TwoFactorPage() {
+  return (
+    <Suspense fallback={<div className="auth-card" />}>
+      <TwoFactorContent />
+    </Suspense>
   );
 }

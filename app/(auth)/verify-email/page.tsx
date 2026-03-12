@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, Loader2, Mail } from "lucide-react";
 import { Button }  from "@/components/ui/Button";
@@ -10,7 +10,7 @@ import Link from "next/link";
 
 type Status = "verifying" | "success" | "error" | "no-token";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   var params  = useSearchParams();
   var router  = useRouter();
   var token   = params.get("token");
@@ -92,5 +92,13 @@ export default function VerifyEmailPage() {
       )}
 
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className="auth-card" />}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

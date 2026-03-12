@@ -95,7 +95,7 @@ export default function SettingsPage() {
   useEffect(function() {
     profileApi.getMyProfile()
       .then(function(res) {
-        var body = res.data as { data: { profile: BackendProfile } };
+        var body = res.data as unknown as { data: { profile: BackendProfile } };
         var p = body.data.profile;
         setProfile(p);
         setSkills(p.skills || []);

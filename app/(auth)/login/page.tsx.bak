@@ -44,6 +44,7 @@ var OAUTH_PROVIDERS = [
   { id: "apple",    label: "Continue with Apple",     icon: APPLE_ICON    }
 ];
 
+// ─── Inner component uses useSearchParams — must be inside Suspense ───────────
 function LoginContent() {
   var router       = useRouter();
   var params       = useSearchParams();
@@ -136,7 +137,7 @@ function LoginContent() {
 
       <div className="divider mb-6">or continue with email</div>
 
-      {/* Form */}
+      {/* Form — all logic untouched */}
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         <Input
           label="Email address"
@@ -191,10 +192,16 @@ function LoginContent() {
   );
 }
 
-export default function LoginPage() {
+// ─── Page export wraps LoginContent in Suspense (Next.js 14 requirement) ─────
+function LoginContent() {
   return (
     <Suspense fallback={<div className="auth-card" />}>
       <LoginContent />
     </Suspense>
   );
+}
+
+import { Suspense } from 'react';
+export default function LoginPage() {
+  return (<Suspense fallback={<div className='auth-card' />}><LoginContent /></Suspense>);
 }
