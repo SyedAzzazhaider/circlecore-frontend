@@ -1,5 +1,4 @@
 const path = require("path");
-
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   webpack: function(config) {
@@ -13,9 +12,16 @@ const nextConfig = {
     ]
   },
   env: {
-    NEXT_PUBLIC_API_URL:    process.env.NEXT_PUBLIC_API_URL    || "http://15.207.144.166",
-    NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL || "http://15.207.144.166"
+    NEXT_PUBLIC_API_URL:    "",
+    NEXT_PUBLIC_SOCKET_URL: "http://15.207.144.166:5000"
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://15.207.144.166:5000/api/:path*"
+      }
+    ];
   }
 };
-
 module.exports = nextConfig;
