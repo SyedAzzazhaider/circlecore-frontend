@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { feedApi, type Post } from "@/lib/api/feed.api";
+import { feedApi, type Post, type FeedFilter } from "@/lib/api/feed.api";
 import { PostCard } from "@/components/posts/PostCard";
 import { PostComposer } from "@/components/posts/PostComposer";
 import { Button } from "@/components/ui/Button";
@@ -10,35 +10,35 @@ import { useSocket } from "@/lib/context/socket.context";
 import { getErrorMessage } from "@/lib/api/client";
 
 var TABS = [
-  { id: "latest",    label: "Latest"    },
-  { id: "trending",  label: "Trending"  },
-  { id: "following", label: "Following" },
-  { id: "unanswered",label: "Unanswered"}
+  { id: "latest",     label: "Latest"     },
+  { id: "trending",   label: "Trending"   },
+  { id: "following",  label: "Following"  },
+  { id: "unanswered", label: "Unanswered" }
 ];
 
 function safeArray<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw as T[];
   var r = raw as any;
-  if (r && Array.isArray(r.data))            return r.data as T[];
-  if (r && r.data && Array.isArray(r.data.data)) return r.data.data as T[];
+  if (r && Array.isArray(r.data))                 return r.data as T[];
+  if (r && r.data && Array.isArray(r.data.data))  return r.data.data as T[];
   return [];
 }
 
 export default function FeedPage() {
-  var [tab,        setTab]        = useState("latest");
-  var [posts,      setPosts]      = useState<Post[]>([]);
-  var [loading,    setLoading]    = useState(true);
-  var [error,      setError]      = useState("");
-  var [page,       setPage]       = useState(1);
-  var [hasMore,    setHasMore]    = useState(false);
-  var [newPosts,   setNewPosts]   = useState(0);
-  var { socket }                  = useSocket();
+  var [tab,      setTab]      = useState<FeedFilter>("latest");
+  var [posts,    setPosts]    = useState<Post[]>([]);
+  var [loading,  setLoading]  = useState(true);
+  var [error,    setError]    = useState("");
+  var [page,     setPage]     = useState(1);
+  var [hasMore,  setHasMore]  = useState(false);
+  var [newPosts, setNewPosts] = useState(0);
+  var { socket }              = useSocket();
 
-  var loadPosts = useCallback(function(t: string, p: number, replace: boolean) {
+  var loadPosts = useCallback(function(t: FeedFilter, p: number, replace: boolean) {
     setLoading(true);
     setError("");
     feedApi
-      .getFeed({ sort: t, page: p, limit: 20 })
+      .getFeed(t, p)
       .then(function(res) {
         var list = safeArray<Post>(res.data);
         if (replace) { setPosts(list); } else { setPosts(function(prev) { return [...prev, ...list]; }); }
@@ -67,9 +67,12 @@ export default function FeedPage() {
     setPosts(function(prev) { return prev.map(function(p) { return p._id === updated._id ? updated : p; }); });
   }
 
+  function handlePostDelete(postId: string) {
+    setPosts(function(prev) { return prev.filter(function(p) { return p._id !== postId; }); });
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-
       <PostComposer onPostCreated={handlePostCreated} />
 
       {newPosts > 0 && (
@@ -86,14 +89,10 @@ export default function FeedPage() {
         {TABS.map(function(t) {
           var isActive = tab === t.id;
           return (
-            <button
-              key={t.id}
-              onClick={function() { setTab(t.id); }}
-              className={[
-                "flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-150",
+            <button key={t.id} onClick={function() { setTab(t.id as FeedFilter); }}
+              className={["flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-150",
                 isActive ? "bg-brand-600 text-white shadow-sm" : "text-surface-500 hover:text-surface-900 hover:bg-surface-100"
-              ].join(" ")}
-            >
+              ].join(" ")}>
               {t.label}
             </button>
           );
@@ -121,7 +120,7 @@ export default function FeedPage() {
         <div>
           <div className="space-y-4">
             {posts.map(function(post) {
-              return <PostCard key={post._id} post={post} onUpdate={handlePostUpdate} />;
+              return <PostCard key={post._id} post={post} onUpdate={handlePostUpdate} onDelete={handlePostDelete} />;
             })}
           </div>
           {hasMore && (

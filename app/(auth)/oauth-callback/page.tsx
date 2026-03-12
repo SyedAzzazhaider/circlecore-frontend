@@ -8,7 +8,7 @@ import { useAuthStore } from "@/lib/store/auth.store";
 import { getErrorMessage } from "@/lib/api/client";
 import toast from "react-hot-toast";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackPageInner() {
   var params   = useSearchParams();
   var router   = useRouter();
   var { setAuth } = useAuthStore();
@@ -71,5 +71,13 @@ export default function OAuthCallbackPage() {
     React.createElement(Loader2, { size: 32, className: "animate-spin text-brand-500 mx-auto mb-4" }),
     React.createElement("p", { className: "text-sm font-semibold text-surface-900" }, "Completing sign-in..."),
     React.createElement("p", { className: "text-xs text-surface-400 mt-1" }, "Please wait a moment.")
+  );
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <OAuthCallbackPageInner />
+    </React.Suspense>
   );
 }

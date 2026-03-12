@@ -1,4 +1,4 @@
-﻿import {
+import {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,

@@ -3,87 +3,37 @@ import api from "./client";
 export type PostType = "text" | "poll" | "resource" | "file";
 
 export type PollOption = {
-  _id: string;
-  text: string;
-  voteCount: number;
-  hasVoted: boolean;
+  _id: string; text: string; voteCount: number; hasVoted: boolean;
 };
-
 export type Reaction = {
-  emoji: string;
-  count: number;
-  hasReacted: boolean;
+  emoji: string; count: number; hasReacted: boolean;
 };
-
 export type Post = {
-  _id: string;
-  type: PostType;
-  title?: string;
-  content: string;
-  author: {
-    _id: string;
-    name: string;
-    avatarUrl?: string;
-    reputationLevel: string;
-    role?: string;
-  };
+  _id: string; type: PostType; title?: string; content: string;
+  author: { _id: string; name: string; avatarUrl?: string; reputationLevel: string; role?: string; };
   community?: { _id: string; name: string; slug: string };
   channel?:   { _id: string; name: string };
-  tags: string[];
-  mediaURLs: string[];
-  reactions: Reaction[];
-  commentCount: number;
-  viewCount: number;
-  helpfulCount: number;
-  hasVotedHelpful: boolean;
-  isSaved: boolean;
-  isPinned: boolean;
-  isLocked: boolean;
-  pollOptions?: PollOption[];
-  resourceUrl?: string;
-  resourceTitle?: string;
-  fileUrl?: string;
-  fileName?: string;
-  fileSize?: number;
-  createdAt: string;
-  updatedAt: string;
+  tags: string[]; mediaURLs: string[]; reactions: Reaction[];
+  commentCount: number; viewCount: number; helpfulCount: number;
+  hasVotedHelpful: boolean; isSaved: boolean; isPinned: boolean; isLocked: boolean;
+  pollOptions?: PollOption[]; resourceUrl?: string; resourceTitle?: string;
+  fileUrl?: string; fileName?: string; fileSize?: number;
+  createdAt: string; updatedAt: string;
 };
-
 export type Comment = {
-  _id: string;
-  content: string;
-  author: {
-    _id: string;
-    name: string;
-    avatarUrl?: string;
-    reputationLevel: string;
-  };
-  postId: string;
-  parentId?: string;
-  replies: Comment[];
-  reactions: Reaction[];
-  isEdited: boolean;
-  createdAt: string;
+  _id: string; content: string;
+  author: { _id: string; name: string; avatarUrl?: string; reputationLevel: string; };
+  postId: string; parentId?: string; replies: Comment[]; reactions: Reaction[];
+  isEdited: boolean; createdAt: string;
 };
-
 export type FeedFilter = "latest" | "trending" | "following" | "unanswered";
-
 export type CreatePostPayload = {
-  type: PostType;
-  title?: string;
-  content: string;
-  communityId?: string;
-  channelId?: string;
-  tags?: string[];
-  pollOptions?: string[];
-  resourceUrl?: string;
-  resourceTitle?: string;
+  type: PostType; title?: string; content: string;
+  communityId?: string; channelId?: string; tags?: string[];
+  pollOptions?: string[]; resourceUrl?: string; resourceTitle?: string;
 };
-
 export type CreateCommentPayload = {
-  content: string;
-  postId: string;
-  parentId?: string;
+  content: string; postId: string; parentId?: string;
 };
 
 type ApiResponse<T> = { data: T };
@@ -108,8 +58,7 @@ export var feedApi = {
     var formData = new FormData();
     formData.append("media", file);
     return api.post<ApiResponse<{ url: string; name: string; size: number }>>(
-      "/posts/upload-media",
-      formData,
+      "/posts/upload-media", formData,
       { headers: { "Content-Type": "multipart/form-data" } }
     );
   },
@@ -147,11 +96,11 @@ export var feedApi = {
   },
 
   pinPost: function(postId: string) {
-    return api.post("/posts/" + postId + "/pin", {});
+    return api.post<ApiResponse<{ isPinned: boolean }>>("/posts/" + postId + "/pin", {});
   },
 
   lockPost: function(postId: string) {
-    return api.post("/posts/" + postId + "/lock", {});
+    return api.post<ApiResponse<{ isLocked: boolean }>>("/posts/" + postId + "/lock", {});
   },
 
   votePoll: function(postId: string, optionId: string) {
@@ -166,12 +115,16 @@ export var feedApi = {
     return api.post<ApiResponse<Comment>>("/comments", payload);
   },
 
-  reactToComment: function(commentId: string, emoji: string) {
-    return api.post<ApiResponse<Comment>>("/comments/" + commentId + "/react", { emoji: emoji });
+  updateComment: function(commentId: string, payload: { content: string }) {
+    return api.put<ApiResponse<Comment>>("/comments/" + commentId, payload);
   },
 
   deleteComment: function(commentId: string) {
     return api.delete("/comments/" + commentId);
+  },
+
+  reactToComment: function(commentId: string, emoji: string) {
+    return api.post<ApiResponse<Comment>>("/comments/" + commentId + "/react", { emoji: emoji });
   },
 
   searchPosts: function(query: string, filter: string, page: number) {

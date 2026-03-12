@@ -1,9 +1,18 @@
-import api from "./client";
+﻿import api from "./client";
 import type { CCUser, AuthResponse } from "@/lib/types";
 
 export type { CCUser, AuthResponse };
 
 var BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://15.207.144.166";
+
+export type Setup2FAResponse = {
+  qrCodeUrl: string;
+  secret: string;
+};
+
+export type Confirm2FAResponse = {
+  recoveryCodes: string[];
+};
 
 export var authApi = {
   register: function(payload: {
@@ -44,8 +53,24 @@ export var authApi = {
     return api.post("/auth/reset-password", { token: token, password: password });
   },
 
+  changePassword: function(payload: { currentPassword: string; newPassword: string }) {
+    return api.post("/auth/change-password", payload);
+  },
+
   verifyTwoFactor: function(payload: { twoFactorTempToken: string; code: string }) {
     return api.post<{ data: AuthResponse }>("/auth/2fa/verify", payload);
+  },
+
+  setup2FA: function() {
+    return api.post<{ data: Setup2FAResponse }>("/auth/2fa/setup", {});
+  },
+
+  confirm2FA: function(code: string) {
+    return api.post<{ data: Confirm2FAResponse }>("/auth/2fa/confirm", { code: code });
+  },
+
+  disable2FA: function(code: string) {
+    return api.post("/auth/2fa/disable", { code: code });
   },
 
   validateInviteCode: function(code: string) {
@@ -55,12 +80,10 @@ export var authApi = {
     );
   },
 
-  /* OAuth — redirects to backend which handles provider handshake */
   getOAuthUrl: function(provider: "google" | "apple" | "linkedin"): string {
     return BASE_URL + "/api/auth/oauth/" + provider;
   },
 
-  /* Called on OAuth callback page to exchange code for tokens */
   oauthCallback: function(provider: string, code: string, state: string) {
     return api.post<{ data: AuthResponse }>("/auth/oauth/" + provider + "/callback", {
       code: code,

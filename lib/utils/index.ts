@@ -29,8 +29,7 @@ export function getAvatarColor(name: string): string {
   for (var i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  var index = Math.abs(hash) % colors.length;
-  return colors[index] || "bg-brand-500";
+  return colors[Math.abs(hash) % colors.length] || "bg-brand-500";
 }
 
 export function truncate(str: string, maxLength: number): string {
@@ -40,12 +39,7 @@ export function truncate(str: string, maxLength: number): string {
 
 export function isValidUrl(str: string): boolean {
   if (!str) { return false; }
-  try {
-    new URL(str);
-    return true;
-  } catch(e) {
-    return false;
-  }
+  try { new URL(str); return true; } catch(e) { return false; }
 }
 
 export function formatCount(n: number): string {

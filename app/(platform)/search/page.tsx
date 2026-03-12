@@ -13,7 +13,7 @@ var FILTER_TABS = [
   { id: "trending", label: "Trending" }
 ];
 
-export default function SearchPage() {
+function SearchPageInner() {
   var searchParams = useSearchParams();
   var router       = useRouter();
 
@@ -201,5 +201,13 @@ export default function SearchPage() {
         React.createElement("p", { className: "text-xs text-surface-400" }, "Find posts by keyword, topic, or hashtag.")
       )
     )
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <SearchPageInner />
+    </React.Suspense>
   );
 }

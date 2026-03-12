@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, Calendar, Clock, MapPin,
+  ArrowLeft, Calendar, MapPin,
   Video, Users, Bell, BellOff,
   ExternalLink, Loader2, Download
 } from "lucide-react";
@@ -11,6 +11,14 @@ import { eventsApi, type CCEvent } from "@/lib/api/events.api";
 import { EventBadge } from "@/components/events/EventBadge";
 import { Button } from "@/components/ui/Button";
 import { formatCount } from "@/lib/utils";
+import {
+  isEventPast,
+  isEventLive,
+  isEventFull,
+  getCapacityPercent,
+  getCapacityBarColor,
+  getSpotsRemaining
+} from "@/lib/utils/events";
 import {
   generateGoogleCalendarUrl,
   downloadICal
@@ -50,7 +58,7 @@ export default function EventDetailPage() {
   }, [eventId]);
 
   async function handleRsvp() {
-    if (!event || rsvping) return;
+    if (!event || rsvping || isEventPast(event.status)) return;
     setRsvping(true);
     try {
       if (hasRsvped) {
@@ -62,7 +70,7 @@ export default function EventDetailPage() {
         var r2 = await eventsApi.rsvp(event._id);
         setHasRsvped(true);
         setRsvpCount(r2.data.data.rsvpCount);
-        toast.success("You are going! \uD83C\uDF89");
+        toast.success("You are going!");
       }
     } catch(err) {
       toast.error(getErrorMessage(err));
@@ -72,7 +80,7 @@ export default function EventDetailPage() {
   }
 
   async function handleReminder() {
-    if (!event || reminding || event.status === "past") return;
+    if (!event || reminding || isEventPast(event.status)) return;
     setReminding(true);
     try {
       if (reminderSet) {
@@ -82,7 +90,7 @@ export default function EventDetailPage() {
       } else {
         await eventsApi.setReminder(event._id);
         setReminderSet(true);
-        toast.success("Reminder set \u2014 we will notify you before the event starts.");
+        toast.success("Reminder set. We will notify you before the event starts.");
       }
     } catch(err) {
       toast.error(getErrorMessage(err));
@@ -136,21 +144,21 @@ export default function EventDetailPage() {
     );
   }
 
-  var startDate    = new Date(event.startDate);
-  var endDate      = new Date(event.endDate);
-  var isPast       = event.status === "past";
-  var isLive       = event.status === "live";
-  var isFull       = event.maxAttendees ? rsvpCount >= event.maxAttendees : false;
-  var dateStr      = startDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  var startTime    = startDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-  var endTime      = endDate.toLocaleTimeString("en-US",   { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-  var capacityPct  = event.maxAttendees ? Math.min(100, Math.round((rsvpCount / event.maxAttendees) * 100)) : 0;
-  var barColor     = capacityPct >= 90 ? "bg-danger-500" : capacityPct >= 70 ? "bg-amber-500" : "bg-brand-500";
+  var startDate   = new Date(event.startDate);
+  var endDate     = new Date(event.endDate);
+  var isPast      = isEventPast(event.status);
+  var isLive      = isEventLive(event.status);
+  var isFull      = isEventFull(rsvpCount, event.maxAttendees);
+  var capacityPct = event.maxAttendees ? getCapacityPercent(rsvpCount, event.maxAttendees) : 0;
+  var barColor    = getCapacityBarColor(capacityPct);
+  var spotsLeft   = getSpotsRemaining(rsvpCount, event.maxAttendees);
+  var dateStr     = startDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  var startTime   = startDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  var endTime     = endDate.toLocaleTimeString("en-US",   { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
 
-      {/* Back */}
       <button
         onClick={function() { router.push("/events"); }}
         className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-900 transition-colors mb-5 font-medium"
@@ -161,10 +169,8 @@ export default function EventDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── Left: main content ── */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Cover or gradient hero */}
           {event.coverImageUrl ? (
             <img
               src={event.coverImageUrl}
@@ -180,7 +186,6 @@ export default function EventDetailPage() {
             </div>
           )}
 
-          {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <EventBadge type={event.type} status={event.status} size="md" />
             {isLive && (
@@ -191,16 +196,13 @@ export default function EventDetailPage() {
             )}
           </div>
 
-          {/* Title */}
           <h1 className="text-2xl font-bold text-surface-900 leading-tight">{event.title}</h1>
 
-          {/* Description */}
           <div className="card p-5">
             <h2 className="text-sm font-bold text-surface-900 mb-3">About this event</h2>
             <p className="text-sm text-surface-700 leading-relaxed whitespace-pre-line">{event.details}</p>
           </div>
 
-          {/* Tags */}
           {event.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {event.tags.map(function(tag) {
@@ -214,10 +216,8 @@ export default function EventDetailPage() {
           )}
         </div>
 
-        {/* ── Right: sidebar ── */}
         <div className="space-y-4">
 
-          {/* RSVP card */}
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-3">
               <Users size={15} className="text-surface-400" />
@@ -228,7 +228,6 @@ export default function EventDetailPage() {
               </span>
             </div>
 
-            {/* Capacity bar */}
             {event.maxAttendees && (
               <div className="mb-4">
                 <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
@@ -238,13 +237,17 @@ export default function EventDetailPage() {
                   />
                 </div>
                 <p className="text-xs text-surface-400 mt-1">
-                  {isFull ? "No spots remaining" : (100 - capacityPct) + "% spots remaining"}
+                  {isFull
+                    ? "No spots remaining"
+                    : spotsLeft !== null
+                      ? spotsLeft + " spot" + (spotsLeft === 1 ? "" : "s") + " remaining"
+                      : ""}
                 </p>
               </div>
             )}
 
             {!isPast && (
-              <>
+              <div>
                 <Button
                   fullWidth
                   variant={hasRsvped ? "secondary" : "primary"}
@@ -269,18 +272,17 @@ export default function EventDetailPage() {
                   {reminderSet ? <Bell size={13} /> : <BellOff size={13} />}
                   {reminderSet ? "Reminder is on" : "Set a reminder"}
                 </button>
-              </>
+              </div>
             )}
           </div>
 
-          {/* Date & time */}
           <div className="card p-5 space-y-3">
-            <h3 className="text-xs font-bold text-surface-500 uppercase tracking-wider">Date & time</h3>
+            <h3 className="text-xs font-bold text-surface-500 uppercase tracking-wider">Date &amp; time</h3>
             <div className="flex items-start gap-2.5">
               <Calendar size={15} className="text-brand-500 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-surface-900">{dateStr}</p>
-                <p className="text-xs text-surface-500 mt-0.5">{startTime} \u2013 {endTime}</p>
+                <p className="text-xs text-surface-500 mt-0.5">{startTime} {"-"} {endTime}</p>
               </div>
             </div>
             {event.location && (
@@ -292,7 +294,7 @@ export default function EventDetailPage() {
             {event.meetingUrl && (
               <div className="flex items-start gap-2.5">
                 <Video size={15} className="text-brand-500 shrink-0 mt-0.5" />
-                
+                <a
                   href={event.meetingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -305,7 +307,6 @@ export default function EventDetailPage() {
             )}
           </div>
 
-          {/* Calendar sync — PRD requirement */}
           {!isPast && (
             <div className="card p-5">
               <h3 className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-3">Add to calendar</h3>
@@ -332,7 +333,6 @@ export default function EventDetailPage() {
             </div>
           )}
 
-          {/* Organizer */}
           <div className="card p-5">
             <h3 className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-3">Organizer</h3>
             <Link
@@ -346,7 +346,6 @@ export default function EventDetailPage() {
             </Link>
           </div>
 
-          {/* Community */}
           {event.community && (
             <div className="card p-4">
               <p className="text-xs text-surface-400 mb-1">Hosted by</p>
@@ -358,6 +357,7 @@ export default function EventDetailPage() {
               </Link>
             </div>
           )}
+
         </div>
       </div>
     </div>
