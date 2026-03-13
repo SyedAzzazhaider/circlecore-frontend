@@ -180,7 +180,7 @@ export function PostCard({ post, onDelete, onUpdate }: PostCardProps) {
                 {post.author.name}
               </Link>
               {post.author.role && (post.author.role === "moderator" || post.author.role === "admin" || post.author.role === "super_admin") && (
-                <ModeratorBadge role={post.author.role} size="xs" />
+                <ModeratorBadge role={post.author.role} size="sm" />
               )}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -392,3 +392,4 @@ function getTimeAgo(dateStr: string): string {
   if (diff < 604800) return Math.floor(diff / 86400) + "d ago";
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+

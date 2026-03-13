@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -58,7 +58,7 @@ export default function FeedPage() {
   var loadPosts = useCallback(function(t: string, p: number, replace: boolean) {
     setLoading(true);
     setError("");
-    feedApi.getFeed({ sort: t, page: p, limit: 20 })
+    feedApi.getFeed(t as any, p)
       .then(function(res) {
         var list = safeArray<Post>(res.data);
         if (replace) { setPosts(list); } else { setPosts(function(prev) { return [...prev, ...list]; }); }
@@ -93,7 +93,7 @@ export default function FeedPage() {
     <div className="max-w-6xl mx-auto px-4 py-6">
       <div className="flex gap-6 items-start">
 
-        {/* ── MAIN FEED ─────────────────────────────────── */}
+        {/* â”€â”€ MAIN FEED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="flex-1 min-w-0 max-w-2xl">
 
           {/* Composer */}
@@ -110,7 +110,7 @@ export default function FeedPage() {
                 color: "#4f46e5"
               }}>
               <Sparkles size={14} />
-              {newPosts} new {newPosts === 1 ? "post" : "posts"} — click to refresh
+              {newPosts} new {newPosts === 1 ? "post" : "posts"} â€” click to refresh
               <RefreshCw size={13} />
             </button>
           )}
@@ -198,7 +198,7 @@ export default function FeedPage() {
           )}
         </div>
 
-        {/* ── RIGHT SIDEBAR ─────────────────────────────── */}
+        {/* â”€â”€ RIGHT SIDEBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div className="hidden xl:flex flex-col gap-4 w-72 shrink-0 sticky top-6">
 
           {/* Trending tags */}
@@ -285,3 +285,4 @@ export default function FeedPage() {
     </div>
   );
 }
+

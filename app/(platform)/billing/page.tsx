@@ -205,18 +205,18 @@ export default function BillingPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                       style={{ background: visual.iconBg }}>
-                      <span className={isPremium || plan.id === "enterprise" ? "text-white" : "text-surface-600"}>
+                      <span className={(isPremium || (plan.id as string) === "enterprise") ? "text-white" : "text-surface-600"}>
                         {visual.icon}
                       </span>
                     </div>
                     <div>
-                      <h3 className={["text-base font-black", isPremium || plan.id === "enterprise" ? "text-white" : "text-surface-900"].join(" ")}>{plan.name}</h3>
+                      <h3 className={["text-base font-black", (isPremium || (plan.id as string) === "enterprise") ? "text-white" : "text-surface-900"].join(" ")}>{plan.name}</h3>
                       <div className="flex items-baseline gap-1">
-                        <span className={["text-xl font-black", isPremium || plan.id === "enterprise" ? "text-white" : "text-surface-900"].join(" ")}>
+                        <span className={["text-xl font-black", (isPremium || (plan.id as string) === "enterprise") ? "text-white" : "text-surface-900"].join(" ")}>
                           {plan.price === 0 ? "Free" : "$" + plan.price}
                         </span>
                         {plan.price > 0 && (
-                          <span className={["text-xs font-medium", isPremium || plan.id === "enterprise" ? "text-white/70" : "text-surface-400"].join(" ")}>
+                          <span className={["text-xs font-medium", (isPremium || (plan.id as string) === "enterprise") ? "text-white/70" : "text-surface-400"].join(" ")}>
                             / {plan.interval}
                           </span>
                         )}
@@ -303,3 +303,4 @@ export default function BillingPage() {
     </div>
   );
 }
+
