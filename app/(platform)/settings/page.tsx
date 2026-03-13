@@ -1,36 +1,36 @@
 "use client";
-
+ 
 import React, { useState, useEffect } from "react";
 import {
   User, Lock, Bell, Trash2, Shield,
   Globe, MapPin, Twitter, Linkedin, Github,
-  Tag, Sparkles, CheckCircle2, Eye, EyeOff,
+  Tag, CheckCircle2, Eye, EyeOff,
   AlertTriangle, Save, Loader2, X, Plus,
-  Check
+  Check, QrCode, Copy, RefreshCw, ShieldCheck
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { profileApi }   from "@/lib/api/profile.api";
+import { authApi }      from "@/lib/api/auth.api";
 import { getErrorMessage } from "@/lib/api/client";
 import { useAuthStore }  from "@/lib/store/auth.store";
 import { AvatarUpload }  from "@/components/profile/AvatarUpload";
 import { Input }         from "@/components/ui/Input";
 import { Button }        from "@/components/ui/Button";
-import { getAvatarColor, getInitials } from "@/lib/utils";
 import toast from "react-hot-toast";
-
-/* ── Types ─────────────────────────────────────────────────── */
+ 
+/* ── Types ──────────────────────────────────────────────────── */
 type BackendProfile = {
   _id: string; userId: string; avatar: string | null; bio: string;
   location: string; website: string; skills: string[]; interests: string[];
   reputation: number; tier: string; completionPercentage: number;
   socialLinks: { twitter?: string; linkedin?: string; github?: string };
 };
-
+ 
 type Tab = "profile" | "security" | "notifications" | "account";
-
-/* ── Schemas ────────────────────────────────────────────────── */
+ 
+/* ── Schemas ─────────────────────────────────────────────────── */
 var profileSchema = z.object({
   bio:      z.string().max(300, "Max 300 characters").optional().or(z.literal("")),
   location: z.string().max(100, "Max 100 characters").optional().or(z.literal("")),
@@ -40,7 +40,7 @@ var profileSchema = z.object({
   github:   z.string().optional().or(z.literal(""))
 });
 type ProfileFormData = z.infer<typeof profileSchema>;
-
+ 
 var passwordSchema = z.object({
   currentPassword: z.string().min(1, "Required"),
   newPassword:     z.string().min(8, "At least 8 characters")
@@ -50,7 +50,17 @@ var passwordSchema = z.object({
   message: "Passwords do not match", path: ["confirmPassword"]
 });
 type PasswordFormData = z.infer<typeof passwordSchema>;
-
+ 
+var twoFactorConfirmSchema = z.object({
+  code: z.string().length(6, "Code must be exactly 6 digits").regex(/^\d+$/, "Digits only")
+});
+type TwoFactorConfirmData = z.infer<typeof twoFactorConfirmSchema>;
+ 
+var twoFactorDisableSchema = z.object({
+  code: z.string().length(6, "Code must be exactly 6 digits").regex(/^\d+$/, "Digits only")
+});
+type TwoFactorDisableData = z.infer<typeof twoFactorDisableSchema>;
+ 
 var SKILL_SUGGESTIONS = [
   "JavaScript","TypeScript","React","Next.js","Node.js","Python",
   "Go","Product Design","UX Research","Data Science","Machine Learning","DevOps"
@@ -59,23 +69,28 @@ var INTEREST_OPTIONS = [
   "Building Products","Open Source","Design Systems","AI & ML","Web3",
   "Climate Tech","Developer Tools","Community Building","Startups","Research","Mentorship","Writing"
 ];
-
+ 
 var TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "profile",       label: "Profile",       icon: <User size={14} />       },
-  { id: "security",      label: "Security",      icon: <Lock size={14} />       },
-  { id: "notifications", label: "Notifications", icon: <Bell size={14} />       },
-  { id: "account",       label: "Account",       icon: <Shield size={14} />     }
+  { id: "profile",       label: "Profile",       icon: <User size={14} />   },
+  { id: "security",      label: "Security",      icon: <Lock size={14} />   },
+  { id: "notifications", label: "Notifications", icon: <Bell size={14} />   },
+  { id: "account",       label: "Account",       icon: <Shield size={14} /> }
 ];
-
+ 
 var PW_RULES = [
-  { label: "8+ characters",     test: function(p: string) { return p.length >= 8; }           },
-  { label: "Uppercase letter",  test: function(p: string) { return /[A-Z]/.test(p); }         },
-  { label: "One number",        test: function(p: string) { return /[0-9]/.test(p); }         }
+  { label: "8+ characters",    test: function(p: string) { return p.length >= 8; }   },
+  { label: "Uppercase letter", test: function(p: string) { return /[A-Z]/.test(p); } },
+  { label: "One number",       test: function(p: string) { return /[0-9]/.test(p); } }
 ];
-
-/* ── Main component ─────────────────────────────────────────── */
+ 
+/* ── 2FA modal step type ─────────────────────────────────────── */
+type TwoFAStep = "idle" | "setup_loading" | "confirm" | "recovery" | "disable";
+ 
+/* ═══════════════════════════════════════════════════════════════
+   Main component
+═══════════════════════════════════════════════════════════════ */
 export default function SettingsPage() {
-  var { user } = useAuthStore();
+  var { user, updateUser } = useAuthStore();
   var [activeTab, setActiveTab] = useState<Tab>("profile");
   var [profile, setProfile]     = useState<BackendProfile | null>(null);
   var [loading, setLoading]     = useState(true);
@@ -83,15 +98,26 @@ export default function SettingsPage() {
   var [interests, setInterests] = useState<string[]>([]);
   var [skillInput, setSkillInput] = useState("");
   var [savingProfile, setSavingProfile] = useState(false);
-
+ 
+  /* 2FA state */
+  var [twoFaStep,     setTwoFaStep]     = useState<TwoFAStep>("idle");
+  var [twoFaQrUrl,    setTwoFaQrUrl]    = useState("");
+  var [twoFaSecret,   setTwoFaSecret]   = useState("");
+  var [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  var [twoFaEnabled,  setTwoFaEnabled]  = useState(false);
+ 
   var profileForm = useForm<ProfileFormData>({ resolver: zodResolver(profileSchema) });
   var passwordForm = useForm<PasswordFormData>({ resolver: zodResolver(passwordSchema) });
+  var twoFaConfirmForm = useForm<TwoFactorConfirmData>({ resolver: zodResolver(twoFactorConfirmSchema) });
+  var twoFaDisableForm = useForm<TwoFactorDisableData>({ resolver: zodResolver(twoFactorDisableSchema) });
+ 
   var pwVal   = passwordForm.watch("newPassword", "");
   var pwScore = PW_RULES.filter(function(r) { return r.test(pwVal); }).length;
   var [showCurPw,  setShowCurPw]  = useState(false);
   var [showNewPw,  setShowNewPw]  = useState(false);
   var [showConfPw, setShowConfPw] = useState(false);
-
+ 
+  /* ── Load profile ──────────────────────────────────────────── */
   useEffect(function() {
     profileApi.getMyProfile()
       .then(function(res) {
@@ -112,36 +138,99 @@ export default function SettingsPage() {
       .catch(function(err) { toast.error(getErrorMessage(err)); })
       .finally(function() { setLoading(false); });
   }, []);
-
+ 
+  useEffect(function() {
+    if (user) setTwoFaEnabled(!!user.twoFactorEnabled);
+  }, [user]);
+ 
+  /* ── BUG 2 FIX: handleSaveProfile now includes socialLinks ─── */
   async function handleSaveProfile(data: ProfileFormData) {
     setSavingProfile(true);
     try {
       await profileApi.updateProfile({
-        bio:      data.bio      || undefined,
-        location: data.location || undefined,
-        website:  data.website  || undefined,
-        skills:   skills,
-        interests: interests
-      } as Parameters<typeof profileApi.updateProfile>[0]);
+        bio:       data.bio      || undefined,
+        location:  data.location || undefined,
+        website:   data.website  || undefined,
+        skills:    skills,
+        interests: interests,
+        socialLinks: {
+          twitter:  data.twitter  || undefined,
+          linkedin: data.linkedin || undefined,
+          github:   data.github   || undefined
+        }
+      });
       toast.success("Profile updated!");
     } catch(err) { toast.error(getErrorMessage(err)); }
     finally { setSavingProfile(false); }
   }
-
+ 
+  /* ── BUG 1 FIX: handleChangePassword now calls authApi ──────── */
   async function handleChangePassword(data: PasswordFormData) {
     try {
+      await authApi.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword:     data.newPassword
+      });
       toast.success("Password updated successfully!");
       passwordForm.reset();
     } catch(err) { toast.error(getErrorMessage(err)); }
   }
-
+ 
+  /* ── BUG 3 FIX: 2FA setup / confirm / disable flows ─────────── */
+  async function handle2FASetup() {
+    setTwoFaStep("setup_loading");
+    try {
+      var res  = await authApi.setup2FA();
+      var data = (res.data as unknown as { data: { qrCodeUrl: string; secret: string } }).data;
+      setTwoFaQrUrl(data.qrCodeUrl);
+      setTwoFaSecret(data.secret);
+      setTwoFaStep("confirm");
+    } catch(err) {
+      toast.error(getErrorMessage(err));
+      setTwoFaStep("idle");
+    }
+  }
+ 
+  async function handle2FAConfirm(data: TwoFactorConfirmData) {
+    try {
+      var res    = await authApi.confirm2FA(data.code);
+      var result = (res.data as unknown as { data: { recoveryCodes: string[] } }).data;
+      setRecoveryCodes(result.recoveryCodes || []);
+      setTwoFaEnabled(true);
+      updateUser({ twoFactorEnabled: true });
+      setTwoFaStep("recovery");
+      twoFaConfirmForm.reset();
+      toast.success("Two-factor authentication enabled!");
+    } catch(err) { toast.error(getErrorMessage(err)); }
+  }
+ 
+  async function handle2FADisable(data: TwoFactorDisableData) {
+    try {
+      await authApi.disable2FA(data.code);
+      setTwoFaEnabled(false);
+      updateUser({ twoFactorEnabled: false });
+      setTwoFaStep("idle");
+      twoFaDisableForm.reset();
+      toast.success("2FA disabled.");
+    } catch(err) { toast.error(getErrorMessage(err)); }
+  }
+ 
+  function copySecret() {
+    navigator.clipboard.writeText(twoFaSecret).then(function() { toast.success("Secret copied!"); });
+  }
+ 
+  function copyRecoveryCodes() {
+    navigator.clipboard.writeText(recoveryCodes.join("\n"))
+      .then(function() { toast.success("Recovery codes copied!"); });
+  }
+ 
   function addSkill(v: string) {
     var t = v.trim();
     if (!t || skills.includes(t) || skills.length >= 15) { setSkillInput(""); return; }
     setSkills(function(prev) { return [...prev, t]; });
     setSkillInput("");
   }
-
+ 
   function toggleInterest(i: string) {
     if (interests.includes(i)) {
       setInterests(function(prev) { return prev.filter(function(x) { return x !== i; }); });
@@ -149,7 +238,7 @@ export default function SettingsPage() {
       setInterests(function(prev) { return [...prev, i]; });
     } else { toast.error("Maximum 10 interests"); }
   }
-
+ 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="flex flex-col items-center gap-3">
@@ -158,19 +247,18 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-
+ 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-
-      {/* Page header */}
+ 
       <div className="mb-8">
         <p className="text-[10px] font-black text-brand-600 uppercase tracking-widest mb-1">Account</p>
         <h1 className="text-2xl font-black text-surface-900 tracking-tight">Settings</h1>
         <p className="text-sm text-surface-500 mt-1">Manage your profile, security, and preferences.</p>
       </div>
-
+ 
       <div className="flex flex-col lg:flex-row gap-6">
-
+ 
         {/* ── Tab sidebar ─────────────────────────────────────── */}
         <div className="lg:w-52 shrink-0">
           <div className="card p-2 lg:sticky lg:top-6">
@@ -191,11 +279,13 @@ export default function SettingsPage() {
             })}
           </div>
         </div>
-
+ 
         {/* ── Tab content ─────────────────────────────────────── */}
         <div className="flex-1 min-w-0 space-y-5">
-
-          {/* ── PROFILE TAB ─────────────────────────────────── */}
+ 
+          {/* ════════════════════════════════════════════════════
+              PROFILE TAB
+          ════════════════════════════════════════════════════ */}
           {activeTab === "profile" && (
             <>
               {/* Avatar card */}
@@ -221,8 +311,8 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-
-              {/* Profile info card */}
+ 
+              {/* Profile info — BUG 2 FIXED: socialLinks saved */}
               <div className="card p-6">
                 <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-5">Profile information</h2>
                 <form onSubmit={profileForm.handleSubmit(handleSaveProfile)} className="space-y-4">
@@ -249,7 +339,7 @@ export default function SettingsPage() {
                       error={profileForm.formState.errors.website?.message}
                       {...profileForm.register("website")} />
                   </div>
-
+ 
                   <div>
                     <p className="label">Social links</p>
                     <div className="space-y-2.5">
@@ -264,7 +354,7 @@ export default function SettingsPage() {
                         {...profileForm.register("github")} />
                     </div>
                   </div>
-
+ 
                   <div className="pt-2 flex justify-end">
                     <Button type="submit" loading={savingProfile} leftIcon={<Save size={13} />}>
                       Save changes
@@ -272,7 +362,7 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </div>
-
+ 
               {/* Skills card */}
               <div className="card p-6">
                 <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-5">Skills</h2>
@@ -288,7 +378,7 @@ export default function SettingsPage() {
                       Add
                     </Button>
                   </div>
-
+ 
                   {skills.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {skills.map(function(s) {
@@ -296,7 +386,8 @@ export default function SettingsPage() {
                           <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
                             style={{ background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe" }}>
                             {s}
-                            <button type="button" onClick={function() { setSkills(function(prev) { return prev.filter(function(x) { return x !== s; }); }); }}
+                            <button type="button"
+                              onClick={function() { setSkills(function(prev) { return prev.filter(function(x) { return x !== s; }); }); }}
                               className="hover:text-red-500 transition-colors ml-0.5">
                               <X size={10} />
                             </button>
@@ -305,7 +396,7 @@ export default function SettingsPage() {
                       })}
                     </div>
                   )}
-
+ 
                   <div>
                     <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">Quick add</p>
                     <div className="flex flex-wrap gap-2">
@@ -319,7 +410,7 @@ export default function SettingsPage() {
                       })}
                     </div>
                   </div>
-
+ 
                   <div className="pt-2 flex justify-end">
                     <Button type="button" loading={savingProfile}
                       onClick={profileForm.handleSubmit(handleSaveProfile)}
@@ -329,7 +420,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-
+ 
               {/* Interests card */}
               <div className="card p-6">
                 <div className="flex items-center justify-between mb-5">
@@ -363,14 +454,19 @@ export default function SettingsPage() {
               </div>
             </>
           )}
-
-          {/* ── SECURITY TAB ──────────────────────────────────── */}
+ 
+          {/* ════════════════════════════════════════════════════
+              SECURITY TAB
+              Bug 1 fixed: password change calls authApi.changePassword()
+              Bug 3 fixed: 2FA setup / confirm / recover / disable flow
+          ════════════════════════════════════════════════════ */}
           {activeTab === "security" && (
             <>
+              {/* ── Change password ─────────────────────────── */}
               <div className="card p-6">
                 <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-1.5">Change password</h2>
                 <p className="text-xs text-surface-500 mb-5">Use a strong password with at least 8 characters, a number, and an uppercase letter.</p>
-
+ 
                 <form onSubmit={passwordForm.handleSubmit(handleChangePassword)} className="space-y-4">
                   <Input label="Current password"
                     type={showCurPw ? "text" : "password"}
@@ -384,7 +480,7 @@ export default function SettingsPage() {
                       </button>
                     }
                     {...passwordForm.register("currentPassword")} />
-
+ 
                   <div>
                     <Input label="New password"
                       type={showNewPw ? "text" : "password"}
@@ -420,7 +516,7 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
-
+ 
                   <Input label="Confirm new password"
                     type={showConfPw ? "text" : "password"}
                     placeholder="Repeat new password"
@@ -433,7 +529,7 @@ export default function SettingsPage() {
                       </button>
                     }
                     {...passwordForm.register("confirmPassword")} />
-
+ 
                   <div className="pt-2 flex justify-end">
                     <Button type="submit" loading={passwordForm.formState.isSubmitting}>
                       Update password
@@ -441,33 +537,168 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </div>
-
+ 
+              {/* ── Two-Factor Authentication ────────────────── */}
               <div className="card p-6">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-1.5">Two-factor authentication</h2>
-                    <p className="text-sm font-semibold text-surface-900 mb-1">Add an extra layer of security</p>
+                    <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-1.5">
+                      Two-factor authentication
+                    </h2>
+                    <p className="text-sm font-semibold text-surface-900 mb-1">
+                      {twoFaEnabled ? "2FA is enabled" : "Add an extra layer of security"}
+                    </p>
                     <p className="text-xs text-surface-500 leading-relaxed max-w-sm">
-                      Enable 2FA to require a one-time code from your authenticator app every time you sign in.
+                      {twoFaEnabled
+                        ? "Your account is protected with a time-based authenticator code."
+                        : "Require a one-time code from your authenticator app on every sign-in."}
                     </p>
                   </div>
-                  <div className="shrink-0 ml-6">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-surface-100 text-surface-500 border border-surface-200">
-                      Not enabled
-                    </span>
+                  <span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ml-4 " +
+                    (twoFaEnabled
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-surface-100 text-surface-500 border border-surface-200")}>
+                    {twoFaEnabled ? <ShieldCheck size={10} /> : <Shield size={10} />}
+                    {twoFaEnabled ? "Enabled" : "Not enabled"}
+                  </span>
+                </div>
+ 
+                {/* ── STEP: IDLE ── */}
+                {twoFaStep === "idle" && (
+                  <div>
+                    {twoFaEnabled ? (
+                      <Button variant="danger" leftIcon={<Shield size={13} />}
+                        onClick={function() { setTwoFaStep("disable"); }}>
+                        Disable 2FA
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" leftIcon={<QrCode size={13} />}
+                        onClick={handle2FASetup}>
+                        Enable 2FA
+                      </Button>
+                    )}
                   </div>
-                </div>
-                <div className="mt-5">
-                  <Button variant="secondary" leftIcon={<Shield size={13} />}
-                    onClick={function() { toast("2FA setup coming soon!"); }}>
-                    Enable 2FA
-                  </Button>
-                </div>
+                )}
+ 
+                {/* ── STEP: LOADING ── */}
+                {twoFaStep === "setup_loading" && (
+                  <div className="flex items-center gap-2 text-sm text-surface-500 py-2">
+                    <Loader2 size={14} className="animate-spin text-brand-500" />
+                    Generating your QR code...
+                  </div>
+                )}
+ 
+                {/* ── STEP: CONFIRM (scan QR + enter code) ── */}
+                {twoFaStep === "confirm" && (
+                  <div className="mt-2 space-y-5">
+                    <div className="p-4 rounded-xl border border-surface-200 bg-surface-50">
+                      <p className="text-xs font-bold text-surface-700 mb-3">
+                        Step 1 — Scan this QR code with your authenticator app
+                      </p>
+                      {twoFaQrUrl && (
+                        <div className="flex justify-center mb-3">
+                          <img src={twoFaQrUrl} alt="2FA QR code"
+                            className="w-40 h-40 rounded-xl border border-surface-200 bg-white p-1" />
+                        </div>
+                      )}
+                      {twoFaSecret && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-mono text-surface-600 flex-1 truncate bg-white px-3 py-2 rounded-lg border border-surface-200">
+                            {twoFaSecret}
+                          </p>
+                          <button type="button" onClick={copySecret}
+                            className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 shrink-0">
+                            <Copy size={11} /> Copy
+                          </button>
+                        </div>
+                      )}
+                    </div>
+ 
+                    <div className="p-4 rounded-xl border border-surface-200 bg-surface-50">
+                      <p className="text-xs font-bold text-surface-700 mb-3">
+                        Step 2 — Enter the 6-digit code from your app
+                      </p>
+                      <form onSubmit={twoFaConfirmForm.handleSubmit(handle2FAConfirm)} className="flex gap-2">
+                        <Input placeholder="000000"
+                          maxLength={6}
+                          className="flex-1 text-center text-lg font-mono tracking-[0.3em]"
+                          error={twoFaConfirmForm.formState.errors.code?.message}
+                          {...twoFaConfirmForm.register("code")} />
+                        <Button type="submit" loading={twoFaConfirmForm.formState.isSubmitting}
+                          leftIcon={<ShieldCheck size={13} />}>
+                          Verify & Enable
+                        </Button>
+                      </form>
+                    </div>
+ 
+                    <button type="button" onClick={function() { setTwoFaStep("idle"); twoFaConfirmForm.reset(); }}
+                      className="text-xs text-surface-400 hover:text-surface-600 transition-colors">
+                      Cancel setup
+                    </button>
+                  </div>
+                )}
+ 
+                {/* ── STEP: RECOVERY ── */}
+                {twoFaStep === "recovery" && (
+                  <div className="mt-2 space-y-4">
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+                      <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                      <p className="text-xs font-semibold text-amber-700">
+                        Save these recovery codes — they will not be shown again. Each code can only be used once.
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        {recoveryCodes.map(function(code) {
+                          return (
+                            <span key={code} className="text-xs font-mono text-surface-700 bg-white px-3 py-2 rounded-lg border border-surface-200 text-center">
+                              {code}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-end">
+                        <button type="button" onClick={copyRecoveryCodes}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+                          <Copy size={11} /> Copy all codes
+                        </button>
+                      </div>
+                    </div>
+                    <Button onClick={function() { setTwoFaStep("idle"); }} leftIcon={<Check size={13} />}>
+                      Done — I have saved my codes
+                    </Button>
+                  </div>
+                )}
+ 
+                {/* ── STEP: DISABLE ── */}
+                {twoFaStep === "disable" && (
+                  <div className="mt-2 space-y-4">
+                    <p className="text-sm text-surface-600">
+                      Enter the 6-digit code from your authenticator app to confirm disabling 2FA.
+                    </p>
+                    <form onSubmit={twoFaDisableForm.handleSubmit(handle2FADisable)} className="flex gap-2">
+                      <Input placeholder="000000"
+                        maxLength={6}
+                        className="flex-1 text-center text-lg font-mono tracking-[0.3em]"
+                        error={twoFaDisableForm.formState.errors.code?.message}
+                        {...twoFaDisableForm.register("code")} />
+                      <Button type="submit" variant="danger" loading={twoFaDisableForm.formState.isSubmitting}>
+                        Disable
+                      </Button>
+                    </form>
+                    <button type="button" onClick={function() { setTwoFaStep("idle"); twoFaDisableForm.reset(); }}
+                      className="text-xs text-surface-400 hover:text-surface-600 transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
-
-          {/* ── NOTIFICATIONS TAB ─────────────────────────────── */}
+ 
+          {/* ════════════════════════════════════════════════════
+              NOTIFICATIONS TAB
+          ════════════════════════════════════════════════════ */}
           {activeTab === "notifications" && (
             <div className="card p-6">
               <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-5">Notification preferences</h2>
@@ -501,18 +732,20 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-
-          {/* ── ACCOUNT TAB ───────────────────────────────────── */}
+ 
+          {/* ════════════════════════════════════════════════════
+              ACCOUNT TAB
+          ════════════════════════════════════════════════════ */}
           {activeTab === "account" && (
             <>
               <div className="card p-6">
                 <h2 className="text-[10px] font-black text-surface-500 uppercase tracking-widest mb-5">Account information</h2>
                 <div className="space-y-3">
                   {[
-                    { label: "Name",       value: user?.name  || "—" },
-                    { label: "Email",      value: user?.email || "—" },
-                    { label: "Role",       value: user?.role  || "member" },
-                    { label: "Member ID",  value: user?._id   || "—"    }
+                    { label: "Name",      value: user?.name  || "—" },
+                    { label: "Email",     value: user?.email || "—" },
+                    { label: "Role",      value: user?.role  || "member" },
+                    { label: "Member ID", value: user?._id   || "—"     }
                   ].map(function(row) {
                     return (
                       <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-surface-100 last:border-0">
@@ -523,7 +756,7 @@ export default function SettingsPage() {
                   })}
                 </div>
               </div>
-
+ 
               <div className="card p-6 border border-red-100">
                 <div className="flex items-start gap-3 mb-5">
                   <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0 mt-0.5">
@@ -543,7 +776,7 @@ export default function SettingsPage() {
               </div>
             </>
           )}
-
+ 
         </div>
       </div>
     </div>

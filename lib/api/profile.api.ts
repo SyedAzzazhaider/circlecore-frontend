@@ -40,6 +40,12 @@ export type ReputationHistory = {
   createdAt:   string;
 };
 
+export type FollowStatus = {
+  isFollowing:    boolean;
+  followersCount: number;
+  followingCount: number;
+};
+
 export type UpdateProfilePayload = {
   name?:        string;
   bio?:         string;
@@ -109,5 +115,25 @@ export var profileApi = {
 
   removeHelpfulVote: function(postId: string) {
     return api.delete<ApiResponse<{ helpfulCount: number }>>("/posts/" + postId + "/helpful");
+  },
+
+  /* ── Follow / Unfollow — Gap B-2 ──────────────────────────── */
+
+  followUser: function(userId: string) {
+    return api.post<ApiResponse<{ isFollowing: boolean; followersCount: number }>>(
+      "/profiles/" + userId + "/follow", {}
+    );
+  },
+
+  unfollowUser: function(userId: string) {
+    return api.delete<ApiResponse<{ isFollowing: boolean; followersCount: number }>>(
+      "/profiles/" + userId + "/follow"
+    );
+  },
+
+  getFollowStatus: function(userId: string) {
+    return api.get<ApiResponse<FollowStatus>>(
+      "/profiles/" + userId + "/follow-status"
+    );
   }
 };
