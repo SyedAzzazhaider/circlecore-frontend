@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -8,16 +8,17 @@ import {
   Bell, CreditCard, Settings,
   Search, Menu, X, LogOut, ChevronRight
 } from "lucide-react";
-import { useAuthStore } from "@/lib/store/auth.store";
+import { useAuthStore }        from "@/lib/store/auth.store";
 import { getInitials, getAvatarColor } from "@/lib/utils";
-import { SocketProvider } from "@/lib/context/socket.context";
-import { useSessionTimeout } from "@/lib/hooks/useSessionTimeout";
+import { SocketProvider }      from "@/lib/context/socket.context";
+import { useSessionTimeout }   from "@/lib/hooks/useSessionTimeout";
+import { NotificationBell }    from "@/components/notifications/NotificationBell";
 
 var NAV_ITEMS = [
   { href: "/feed",          icon: LayoutDashboard, label: "Feed"          },
   { href: "/communities",   icon: Users,           label: "Communities"   },
   { href: "/events",        icon: Calendar,        label: "Events"        },
-  { href: "/notifications", icon: Bell,            label: "Notifications" },
+  { href: "/notifications", icon: Bell,            label: "Notifications", hasLiveBadge: true },
   { href: "/billing",       icon: CreditCard,      label: "Billing"       },
   { href: "/settings",      icon: Settings,        label: "Settings"      }
 ];
@@ -56,7 +57,7 @@ function PlatformInner({ children }: { children: React.ReactNode }) {
           className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-surface-50 border border-surface-200 text-xs text-surface-400 hover:border-brand-300 hover:bg-brand-50/50 transition-all group">
           <Search size={12} className="group-hover:text-brand-500 transition-colors" />
           <span className="group-hover:text-surface-600 transition-colors">Search anything...</span>
-          <span className="ml-auto text-[10px] font-semibold text-surface-300 bg-surface-100 px-1.5 py-0.5 rounded-md">⌘K</span>
+          <span className="ml-auto text-[10px] font-semibold text-surface-300 bg-surface-100 px-1.5 py-0.5 rounded-md">&#8984;K</span>
         </Link>
       </div>
 
@@ -72,7 +73,10 @@ function PlatformInner({ children }: { children: React.ReactNode }) {
                   ? "bg-brand-50 text-brand-700 font-semibold"
                   : "text-surface-600 hover:bg-surface-100 hover:text-surface-900"
               ].join(" ")}>
-              <item.icon size={16} className={active ? "text-brand-600" : "text-surface-400 group-hover:text-surface-600 transition-colors"} />
+              {item.hasLiveBadge
+                ? <NotificationBell active={active} />
+                : <item.icon size={16} className={active ? "text-brand-600" : "text-surface-400 group-hover:text-surface-600 transition-colors"} />
+              }
               <span className="flex-1">{item.label}</span>
               {active && <ChevronRight size={12} className="text-brand-400" />}
             </Link>
@@ -145,7 +149,10 @@ function PlatformInner({ children }: { children: React.ReactNode }) {
                     className={["flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
                       active ? "bg-brand-50 text-brand-700 font-semibold" : "text-surface-600 hover:bg-surface-100"
                     ].join(" ")}>
-                    <item.icon size={16} className={active ? "text-brand-600" : "text-surface-400"} />
+                    {item.hasLiveBadge
+                      ? <NotificationBell active={active} />
+                      : <item.icon size={16} className={active ? "text-brand-600" : "text-surface-400"} />
+                    }
                     {item.label}
                   </Link>
                 );

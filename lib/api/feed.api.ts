@@ -1,4 +1,4 @@
-import api from "./client";
+﻿import api from "./client";
 
 export type PostType = "text" | "poll" | "resource" | "file";
 
@@ -41,7 +41,7 @@ type PaginatedResponse<T> = { data: T[]; total: number; page: number; totalPages
 
 export var feedApi = {
   getFeed: function(filter: FeedFilter, page: number, tag?: string) {
-    var url = "/posts?filter=" + filter + "&page=" + page + "&limit=20";
+    var url = "/posts/feed?filter=" + filter + "&page=" + page + "&limit=20";
     if (tag) url += "&tag=" + encodeURIComponent(tag);
     return api.get<ApiResponse<PaginatedResponse<Post>>>(url);
   },

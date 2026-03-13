@@ -1,25 +1,121 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Lock, ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
-import { PostCard }          from "@/components/posts/PostCard";
-import { TypingIndicator }   from "@/components/presence/TypingIndicator";
-import { feedApi, type Post, type Comment, type Reaction } from "@/lib/api/feed.api";
-import { useSocket }         from "@/lib/context/socket.context";
-import { useAuthStore }      from "@/lib/store/auth.store";
-import { getErrorMessage }   from "@/lib/api/client";
+import { ArrowLeft, Loader2, Lock, MessageCircle, CornerDownRight } from "lucide-react";
+import { PostCard }        from "@/components/posts/PostCard";
+import { TypingIndicator } from "@/components/presence/TypingIndicator";
+import { feedApi, type Post, type Comment } from "@/lib/api/feed.api";
+import { useSocket }       from "@/lib/context/socket.context";
+import { useAuthStore }    from "@/lib/store/auth.store";
+import { getErrorMessage } from "@/lib/api/client";
 import { getInitials, getAvatarColor, formatCount } from "@/lib/utils";
-import { Button }            from "@/components/ui/Button";
+import { Button }          from "@/components/ui/Button";
 import toast from "react-hot-toast";
 
 var REACTION_EMOJIS = ["👍", "❤️", "🔥", "💡", "👏"];
 var TYPING_DEBOUNCE = 2000;
 
+function CommentItem({ comment, depth, onReply, onDelete, onReact }: {
+  comment: Comment; depth: number;
+  onReply:  (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+  onReact:  (id: string, emoji: string) => void;
+}) {
+  var { user } = useAuthStore();
+  var [showReactions, setShowReactions] = useState(false);
+  var isOwner = user && user._id === comment.author._id;
+  var diff    = Math.floor((Date.now() - new Date(comment.createdAt).getTime()) / 1000);
+  var timeAgo = diff < 60 ? "just now" : diff < 3600 ? Math.floor(diff / 60) + "m ago" : Math.floor(diff / 3600) + "h ago";
+
+  return (
+    <div className={["flex gap-3", depth > 0 ? "ml-9 mt-3" : ""].join(" ")}>
+      {depth > 0 && <CornerDownRight size={13} className="text-surface-300 mt-3.5 shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <div className="flex gap-3">
+          <div className={"w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5 " + getAvatarColor(comment.author.name)}>
+            {comment.author.avatarUrl
+              ? <img src={comment.author.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+              : getInitials(comment.author.name)
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="bg-surface-50 border border-surface-200 rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-bold text-surface-900">{comment.author.name}</span>
+                <span className="text-[10px] text-surface-400">{timeAgo}</span>
+                {comment.isEdited && <span className="text-[10px] text-surface-300 italic">edited</span>}
+              </div>
+              <p className="text-sm text-surface-700 leading-relaxed whitespace-pre-wrap break-words">{comment.content}</p>
+            </div>
+            <div className="flex items-center gap-3 mt-2 px-1">
+              <div className="relative">
+                <button onClick={function() { setShowReactions(function(v) { return !v; }); }}
+                  className="text-[11px] text-surface-400 hover:text-brand-600 font-semibold transition-colors">
+                  React
+                </button>
+                {showReactions && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={function() { setShowReactions(false); }} />
+                    <div className="absolute bottom-7 left-0 z-20 flex gap-1 bg-white border border-surface-200 rounded-2xl shadow-lg px-2 py-1.5">
+                      {REACTION_EMOJIS.map(function(emoji) {
+                        return (
+                          <button key={emoji} onClick={function() { onReact(comment._id, emoji); setShowReactions(false); }}
+                            className="text-lg hover:scale-125 transition-transform p-0.5">
+                            {emoji}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+              {depth === 0 && (
+                <button onClick={function() { onReply(comment._id, comment.author.name); }}
+                  className="text-[11px] text-surface-400 hover:text-brand-600 font-semibold transition-colors flex items-center gap-1">
+                  <CornerDownRight size={10} />Reply
+                </button>
+              )}
+              {isOwner && (
+                <button onClick={function() { if (confirm("Delete comment?")) onDelete(comment._id); }}
+                  className="text-[11px] text-red-400 hover:text-red-600 font-semibold transition-colors">
+                  Delete
+                </button>
+              )}
+              {comment.reactions && comment.reactions.some(function(r) { return r.count > 0; }) && (
+                <div className="flex items-center gap-1 ml-1">
+                  {comment.reactions.filter(function(r) { return r.count > 0; }).map(function(r) {
+                    return (
+                      <button key={r.emoji} onClick={function() { onReact(comment._id, r.emoji); }}
+                        className={["flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all",
+                          r.hasReacted ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-surface-50 border-surface-200 text-surface-600 hover:border-brand-200 hover:bg-brand-50"
+                        ].join(" ")}>
+                        <span>{r.emoji}</span>
+                        <span className="font-bold">{r.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        {comment.replies && comment.replies.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {comment.replies.map(function(reply) {
+              return <CommentItem key={reply._id} comment={reply} depth={depth + 1} onReply={onReply} onDelete={onDelete} onReact={onReact} />;
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PostDetailPage() {
-  var params = useParams();
-  var router = useRouter();
-  var postId = params.postId as string;
+  var params  = useParams();
+  var router  = useRouter();
+  var postId  = params.postId as string;
   var { socket } = useSocket();
   var { user }   = useAuthStore();
 
@@ -41,8 +137,8 @@ export default function PostDetailPage() {
     setLoading(true);
     Promise.all([feedApi.getPost(postId), feedApi.getComments(postId)])
       .then(function(results) {
-        setPost(results[0].data.data);
-        setComments(results[1].data.data);
+        setPost((results[0].data as any).data as Post);
+        setComments((results[1].data as any).data as Comment[]);
       })
       .catch(function(err) { setError(getErrorMessage(err)); })
       .finally(function() { setLoading(false); });
@@ -51,7 +147,22 @@ export default function PostDetailPage() {
   useEffect(function() {
     if (!socket || !postId) return;
     socket.emit("post:join", postId);
-    function onComment(comment: Comment) { setComments(function(prev) { return [...prev, comment]; }); }
+    function onComment(comment: Comment) {
+      setComments(function(prev) {
+        if (comment.parentId) {
+          return prev.map(function(c) {
+            return c._id === comment.parentId ? Object.assign({}, c, { replies: [...(c.replies || []), comment] }) : c;
+          });
+        }
+        return [...prev, comment];
+      });
+    }
+    function onCommentDeleted(data: { commentId: string }) {
+      setComments(function(prev) {
+        return prev.filter(function(c) { return c._id !== data.commentId; })
+          .map(function(c) { return Object.assign({}, c, { replies: (c.replies || []).filter(function(r) { return r._id !== data.commentId; }) }); });
+      });
+    }
     function onTypingStart(data: { userId: string; userName: string }) {
       if (user && data.userId === user._id) return;
       setTypingUsers(function(prev) { return prev.includes(data.userName) ? prev : [...prev, data.userName]; });
@@ -59,14 +170,16 @@ export default function PostDetailPage() {
     function onTypingStop(data: { userId: string; userName: string }) {
       setTypingUsers(function(prev) { return prev.filter(function(n) { return n !== data.userName; }); });
     }
-    socket.on("comment:new",  onComment);
-    socket.on("typing:start", onTypingStart);
-    socket.on("typing:stop",  onTypingStop);
+    socket.on("comment:new",     onComment);
+    socket.on("comment:deleted", onCommentDeleted);
+    socket.on("typing:start",    onTypingStart);
+    socket.on("typing:stop",     onTypingStop);
     return function() {
       socket.emit("post:leave", postId);
-      socket.off("comment:new",  onComment);
-      socket.off("typing:start", onTypingStart);
-      socket.off("typing:stop",  onTypingStop);
+      socket.off("comment:new",     onComment);
+      socket.off("comment:deleted", onCommentDeleted);
+      socket.off("typing:start",    onTypingStart);
+      socket.off("typing:stop",     onTypingStop);
     };
   }, [socket, postId, user]);
 
@@ -98,52 +211,66 @@ export default function PostDetailPage() {
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     setSubmitting(true);
     try {
-      var res = await feedApi.createComment({
-        content: commentText.trim(), postId,
-        parentId: replyTo ? replyTo.id : undefined
-      });
-      setComments(function(prev) { return [...prev, res.data.data]; });
+      var res = await feedApi.createComment({ content: commentText.trim(), postId, parentId: replyTo?.id });
+      var newComment = (res.data as any).data as Comment;
+      if (replyTo) {
+        setComments(function(prev) {
+          return prev.map(function(c) {
+            return c._id === replyTo.id ? Object.assign({}, c, { replies: [...(c.replies || []), newComment] }) : c;
+          });
+        });
+      } else {
+        setComments(function(prev) { return [...prev, newComment]; });
+      }
       setCommentText("");
       setReplyTo(null);
-      if (commentBoxRef.current) { commentBoxRef.current.style.height = "auto"; }
-      toast.success("Comment posted");
+      if (commentBoxRef.current) commentBoxRef.current.style.height = "auto";
+      if (post) setPost(function(p) { return p ? Object.assign({}, p, { commentCount: p.commentCount + 1 }) : p; });
     } catch(err) { toast.error(getErrorMessage(err)); }
     finally { setSubmitting(false); }
   }
 
-  function handleCommentReaction(commentId: string, emoji: string) {
-    setComments(function(prev) {
-      return prev.map(function(c) {
-        if (c._id !== commentId) return c;
-        var existing = c.reactions.find(function(r) { return r.emoji === emoji; });
-        var newReactions: Reaction[];
-        if (existing) {
-          newReactions = c.reactions.map(function(r) {
-            return r.emoji === emoji
-              ? { emoji: r.emoji, count: r.hasReacted ? r.count - 1 : r.count + 1, hasReacted: !r.hasReacted }
-              : r;
-          });
-        } else {
-          newReactions = [...c.reactions, { emoji, count: 1, hasReacted: true }];
-        }
-        return Object.assign({}, c, { reactions: newReactions });
+  async function handleDeleteComment(commentId: string) {
+    try {
+      await feedApi.deleteComment(commentId);
+      setComments(function(prev) {
+        return prev.filter(function(c) { return c._id !== commentId; })
+          .map(function(c) { return Object.assign({}, c, { replies: (c.replies || []).filter(function(r) { return r._id !== commentId; }) }); });
       });
-    });
-    feedApi.reactToComment(commentId, emoji).catch(function() {});
+      toast.success("Comment deleted");
+    } catch(err) { toast.error(getErrorMessage(err)); }
   }
 
-  function handleSetReply(id: string, name: string) {
-    setReplyTo({ id, name });
-    setTimeout(function() { if (commentBoxRef.current) commentBoxRef.current.focus(); }, 100);
+  async function handleReactToComment(commentId: string, emoji: string) {
+    try {
+      var res = await feedApi.reactToComment(commentId, emoji);
+      var updated = (res.data as any).data as Comment;
+      setComments(function(prev) {
+        return prev.map(function(c) {
+          if (c._id === commentId) return Object.assign({}, c, { reactions: updated.reactions });
+          return Object.assign({}, c, {
+            replies: (c.replies || []).map(function(r) {
+              return r._id === commentId ? Object.assign({}, r, { reactions: updated.reactions }) : r;
+            })
+          });
+        });
+      });
+    } catch(err) { toast.error(getErrorMessage(err)); }
   }
+
+  function handleReply(id: string, name: string) {
+    setReplyTo({ id, name });
+    if (commentBoxRef.current) {
+      commentBoxRef.current.focus();
+      commentBoxRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  var topLevelComments = comments.filter(function(c) { return !c.parentId; });
 
   if (loading) return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <button onClick={function() { router.back(); }}
-        className="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-900 mb-6 font-semibold transition-colors">
-        <ArrowLeft size={15} />Back
-      </button>
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex flex-col items-center gap-3">
         <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center">
           <Loader2 size={20} className="animate-spin text-brand-500" />
         </div>
@@ -153,223 +280,88 @@ export default function PostDetailPage() {
   );
 
   if (error || !post) return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <button onClick={function() { router.back(); }}
-        className="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-900 mb-6 font-semibold transition-colors">
-        <ArrowLeft size={15} />Back
-      </button>
-      <div className="card p-10 text-center">
-        <p className="text-sm font-bold text-surface-900 mb-1">Post not found</p>
-        <p className="text-xs text-surface-400">{error}</p>
+    <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+      <div className="card p-12">
+        <p className="text-base font-black text-surface-900 mb-2">Post not found</p>
+        <p className="text-sm text-surface-400 mb-6">{error}</p>
+        <Button variant="secondary" onClick={function() { router.back(); }}>Go back</Button>
       </div>
     </div>
   );
 
-  var topComments = comments.filter(function(c) { return !c.parentId; });
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-
       <button onClick={function() { router.back(); }}
-        className="inline-flex items-center gap-2 text-sm text-surface-500 hover:text-surface-900 mb-5 font-semibold transition-colors group">
-        <div className="w-7 h-7 rounded-lg bg-surface-100 group-hover:bg-surface-200 flex items-center justify-center transition-colors">
-          <ArrowLeft size={14} />
-        </div>
-        Back to feed
+        className="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-900 font-semibold mb-5 transition-colors">
+        <ArrowLeft size={15} />Back
       </button>
 
-      <PostCard post={post} onUpdate={function(updated) { setPost(updated); }} />
+      <PostCard post={post} onUpdate={setPost} />
 
-      {post.isLocked && (
-        <div className="mt-4 flex items-center gap-3 p-4 rounded-2xl"
-          style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-          <div className="w-8 h-8 rounded-xl bg-surface-200 flex items-center justify-center shrink-0">
-            <Lock size={14} className="text-surface-500" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-surface-700">Conversation locked</p>
-            <p className="text-xs text-surface-500">New comments are disabled for this post.</p>
-          </div>
-        </div>
-      )}
-
-      {!post.isLocked && user && (
-        <div className="mt-5 bg-white border border-surface-200 rounded-2xl p-4 hover:border-surface-300 transition-colors">
-          {replyTo && (
-            <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-xl"
-              style={{ background: "linear-gradient(135deg,#eef2ff,#f0f9ff)", border: "1px solid #c7d2fe" }}>
-              <span className="text-xs font-bold text-brand-700">Replying to {replyTo.name}</span>
-              <button onClick={function() { setReplyTo(null); }}
-                className="text-xs text-brand-400 hover:text-brand-700 font-bold transition-colors">Cancel</button>
-            </div>
+      <div className="mt-4 bg-white border border-surface-200 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-sm font-black text-surface-900 flex items-center gap-2">
+            <MessageCircle size={15} className="text-brand-500" />
+            {formatCount(topLevelComments.length)} {topLevelComments.length === 1 ? "comment" : "comments"}
+          </h3>
+          {post.isLocked && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-surface-500 bg-surface-100 px-2.5 py-1 rounded-full border border-surface-200">
+              <Lock size={10} />Locked
+            </span>
           )}
-          <div className="flex gap-3">
-            <div className={"w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0 mt-0.5 " + getAvatarColor(user.name)}>
-              {getInitials(user.name)}
-            </div>
-            <div className="flex-1">
-              <textarea
-                ref={commentBoxRef}
-                value={commentText}
-                onChange={handleCommentChange}
-                placeholder={replyTo ? "Write a reply..." : "Write a comment..."}
-                rows={2}
-                maxLength={2000}
-                className="input resize-none w-full"
-                onKeyDown={function(e: React.KeyboardEvent) {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSubmitComment(); }
-                }}
-              />
-              <TypingIndicator names={typingUsers} />
-              <div className="flex items-center justify-between mt-2.5">
-                <span className="text-[10px] text-surface-400 font-medium">{commentText.length}/2000 · Ctrl+Enter to post</span>
-                <Button size="sm" loading={submitting} disabled={commentText.trim().length === 0}
-                  onClick={handleSubmitComment} leftIcon={<MessageCircle size={12} />}>
-                  {replyTo ? "Reply" : "Comment"}
-                </Button>
+        </div>
+
+        {!post.isLocked && user && (
+          <div className="mb-6">
+            {replyTo && (
+              <div className="flex items-center justify-between mb-2 px-3 py-2 rounded-xl bg-brand-50 border border-brand-200">
+                <span className="text-xs text-brand-700 font-semibold flex items-center gap-1.5">
+                  <CornerDownRight size={11} />Replying to {replyTo.name}
+                </span>
+                <button onClick={function() { setReplyTo(null); }}
+                  className="text-xs text-surface-400 hover:text-surface-700 font-bold transition-colors">
+                  Cancel
+                </button>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <div className={"w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-1 " + getAvatarColor(user.name)}>
+                {getInitials(user.name)}
+              </div>
+              <div className="flex-1">
+                <textarea ref={commentBoxRef} value={commentText} onChange={handleCommentChange}
+                  placeholder={replyTo ? "Write a reply..." : "Write a comment..."} rows={1}
+                  className="w-full px-4 py-3 rounded-2xl border border-surface-200 bg-surface-50 text-sm text-surface-900 placeholder-surface-400 resize-none outline-none focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all" />
+                {commentText.trim() && (
+                  <div className="flex justify-end mt-2">
+                    <Button size="sm" loading={submitting} onClick={handleSubmitComment}>
+                      Post {replyTo ? "reply" : "comment"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="mt-6">
-        <div className="flex items-center gap-2 mb-4">
-          <MessageCircle size={14} className="text-surface-400" />
-          <h2 className="text-sm font-black text-surface-900 tracking-tight">
-            {formatCount(topComments.length)} {topComments.length === 1 ? "comment" : "comments"}
-          </h2>
-        </div>
+        {typingUsers.length > 0 && <TypingIndicator names={typingUsers} />}
 
-        {topComments.length === 0 ? (
-          <div className="card p-10 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
-              <MessageCircle size={18} className="text-surface-400" />
+        {topLevelComments.length === 0 ? (
+          <div className="py-10 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-surface-100 border border-surface-200 flex items-center justify-center mx-auto mb-3">
+              <MessageCircle size={16} className="text-surface-400" />
             </div>
-            <p className="text-sm font-semibold text-surface-600 mb-1">No comments yet</p>
-            <p className="text-xs text-surface-400">Be the first to start the conversation!</p>
+            <p className="text-sm font-bold text-surface-700 mb-1">No comments yet</p>
+            <p className="text-xs text-surface-400">Be the first to share your thoughts!</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {topComments.map(function(comment) {
-              var replies = comments.filter(function(c) { return c.parentId === comment._id; });
-              return <CommentItem key={comment._id} comment={comment} replies={replies} onReply={handleSetReply} onReact={handleCommentReaction} />;
+          <div className="space-y-4">
+            {topLevelComments.map(function(comment) {
+              return <CommentItem key={comment._id} comment={comment} depth={0} onReply={handleReply} onDelete={handleDeleteComment} onReact={handleReactToComment} />;
             })}
           </div>
         )}
       </div>
     </div>
   );
-}
-
-function CommentItem({ comment, replies, onReply, onReact }: {
-  comment: Comment;
-  replies: Comment[];
-  onReply: (id: string, name: string) => void;
-  onReact: (commentId: string, emoji: string) => void;
-}) {
-  var [showReplies, setShowReplies] = useState(true);
-  var avatarBg = getAvatarColor(comment.author.name);
-  var initials = getInitials(comment.author.name);
-  var timeAgo  = getTimeAgo(comment.createdAt);
-
-  return (
-    <div className="bg-white border border-surface-200 rounded-2xl p-4 hover:border-surface-300 transition-colors">
-      <div className="flex items-start gap-3">
-        <div className={"w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black shrink-0 " + avatarBg}>
-          {comment.author.avatarUrl
-            ? <img src={comment.author.avatarUrl} alt={comment.author.name} className="w-full h-full rounded-full object-cover" />
-            : initials}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="text-sm font-bold text-surface-900">{comment.author.name}</span>
-            <span className="text-xs text-surface-400">{timeAgo}</span>
-            {comment.isEdited && (
-              <span className="text-[10px] text-surface-400 italic px-1.5 py-0.5 bg-surface-100 rounded-full">edited</span>
-            )}
-          </div>
-          <p className="text-sm text-surface-700 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
-          <div className="flex items-center gap-1 mt-3 flex-wrap">
-            {REACTION_EMOJIS.map(function(emoji) {
-              var reaction   = comment.reactions.find(function(r) { return r.emoji === emoji; });
-              var count      = reaction ? reaction.count : 0;
-              var hasReacted = reaction ? reaction.hasReacted : false;
-              return (
-                <button key={emoji} onClick={function() { onReact(comment._id, emoji); }}
-                  className={["flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all duration-150",
-                    hasReacted ? "bg-brand-50 text-brand-700 border border-brand-200" : "text-surface-400 hover:bg-surface-100 border border-transparent hover:border-surface-200"
-                  ].join(" ")}>
-                  <span className="text-sm leading-none">{emoji}</span>
-                  {count > 0 && <span className="text-[11px] font-bold">{count}</span>}
-                </button>
-              );
-            })}
-            <button onClick={function() { onReply(comment._id, comment.author.name); }}
-              className="ml-1 text-xs font-bold text-surface-400 hover:text-brand-600 transition-colors px-2 py-1 rounded-lg hover:bg-brand-50">
-              Reply
-            </button>
-          </div>
-
-          {replies.length > 0 && (
-            <div className="mt-3">
-              <button onClick={function() { setShowReplies(function(v) { return !v; }); }}
-                className="flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 transition-colors mb-3">
-                {showReplies ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                {replies.length} {replies.length === 1 ? "reply" : "replies"}
-              </button>
-              {showReplies && (
-                <div className="space-y-3 pl-4 border-l-2 border-surface-100">
-                  {replies.map(function(reply) {
-                    return (
-                      <div key={reply._id} className="flex items-start gap-2.5">
-                        <div className={"w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 " + getAvatarColor(reply.author.name)}>
-                          {reply.author.avatarUrl
-                            ? <img src={reply.author.avatarUrl} alt={reply.author.name} className="w-full h-full rounded-full object-cover" />
-                            : getInitials(reply.author.name)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="text-xs font-bold text-surface-900">{reply.author.name}</span>
-                            <span className="text-[10px] text-surface-400">{getTimeAgo(reply.createdAt)}</span>
-                            {reply.isEdited && <span className="text-[9px] text-surface-400 italic px-1 py-0.5 bg-surface-100 rounded">edited</span>}
-                          </div>
-                          <p className="text-xs text-surface-700 leading-relaxed whitespace-pre-wrap">{reply.content}</p>
-                          <div className="flex items-center gap-1 mt-2 flex-wrap">
-                            {REACTION_EMOJIS.map(function(emoji) {
-                              var reaction = reply.reactions.find(function(r) { return r.emoji === emoji; });
-                              var count    = reaction ? reaction.count : 0;
-                              var reacted  = reaction ? reaction.hasReacted : false;
-                              return (
-                                <button key={emoji} onClick={function() { onReact(reply._id, emoji); }}
-                                  className={["flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-xs transition-all duration-150",
-                                    reacted ? "bg-brand-50 text-brand-700 border border-brand-200" : "text-surface-400 hover:bg-surface-100 border border-transparent"
-                                  ].join(" ")}>
-                                  <span className="leading-none">{emoji}</span>
-                                  {count > 0 && <span className="ml-0.5 font-bold text-[10px]">{count}</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function getTimeAgo(dateStr: string): string {
-  var diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60)     return "just now";
-  if (diff < 3600)   return Math.floor(diff / 60) + "m ago";
-  if (diff < 86400)  return Math.floor(diff / 3600) + "h ago";
-  if (diff < 604800) return Math.floor(diff / 86400) + "d ago";
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

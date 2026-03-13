@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React from "react";
-import { Video, MapPin, Lock, Radio } from "lucide-react";
+import { Video, MapPin, Lock, Radio, Globe } from "lucide-react";
 import type { EventType, EventStatus } from "@/lib/api/events.api";
 
 type EventBadgeProps = {
@@ -11,53 +11,51 @@ type EventBadgeProps = {
 };
 
 var TYPE_CONFIG = {
-  webinar: { label: "Webinar", Icon: Video,  bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
-  meetup:  { label: "Meetup",  Icon: MapPin, bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" },
-  room:    { label: "Room",    Icon: Lock,   bg: "#fdf4ff", color: "#7e22ce", border: "#e9d5ff" }
+  webinar: { label: "Webinar", Icon: Video,  bg: "rgba(219,234,254,0.8)", color: "#1d4ed8", border: "rgba(147,197,253,0.6)" },
+  meetup:  { label: "Meetup",  Icon: MapPin, bg: "rgba(220,252,231,0.8)", color: "#15803d", border: "rgba(134,239,172,0.6)" },
+  room:    { label: "Room",    Icon: Globe,  bg: "rgba(243,232,255,0.8)", color: "#7e22ce", border: "rgba(216,180,254,0.6)" }
 };
 
 var STATUS_CONFIG = {
-  upcoming: { label: "Upcoming",  bg: "#f0f9ff", color: "#0369a1", border: "#bae6fd" },
-  live:     { label: "Live Now",  bg: "#fef2f2", color: "#b91c1c", border: "#fecaca" },
-  past:     { label: "Past",      bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" }
-};
-
-var BASE_STYLE: React.CSSProperties = {
-  display:      "inline-flex",
-  alignItems:   "center",
-  borderRadius: "9999px",
-  fontWeight:   700,
-  whiteSpace:   "nowrap"
+  upcoming: { label: "Upcoming", bg: "rgba(224,242,254,0.8)", color: "#0369a1", border: "rgba(125,211,252,0.5)" },
+  live:     { label: "Live Now", bg: "rgba(254,226,226,0.9)", color: "#b91c1c", border: "rgba(252,165,165,0.6)" },
+  past:     { label: "Past",     bg: "rgba(241,245,249,0.8)", color: "#64748b", border: "rgba(203,213,225,0.6)" }
 };
 
 export function EventBadge({ type, status, size = "md" }: EventBadgeProps) {
-  var pad      = size === "sm" ? "2px 7px"  : "3px 9px";
-  var fontSize = size === "sm" ? "0.65rem"  : "0.7rem";
+  var pad      = size === "sm" ? "2px 8px"  : "3px 10px";
+  var fontSize = size === "sm" ? "0.64rem"  : "0.68rem";
   var iconSize = size === "sm" ? 10 : 11;
-  var gap      = size === "sm" ? "3px" : "4px";
 
-  return React.createElement(
-    "span",
-    { style: { display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" as const } },
+  var base: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "4px",
+    borderRadius: "9999px", fontWeight: 700, whiteSpace: "nowrap",
+    padding: pad, fontSize, backdropFilter: "blur(8px)",
+    letterSpacing: "0.01em"
+  };
 
-    type && (function() {
-      var cfg = TYPE_CONFIG[type];
-      return React.createElement(
-        "span",
-        { key: "type", style: { ...BASE_STYLE, gap, padding: pad, fontSize, backgroundColor: cfg.bg, color: cfg.color, border: "1px solid " + cfg.border } },
-        React.createElement(cfg.Icon, { size: iconSize }),
-        cfg.label
-      );
-    })(),
-
-    status && (function() {
-      var cfg = STATUS_CONFIG[status];
-      return React.createElement(
-        "span",
-        { key: "status", style: { ...BASE_STYLE, gap, padding: pad, fontSize, backgroundColor: cfg.bg, color: cfg.color, border: "1px solid " + cfg.border } },
-        status === "live" && React.createElement(Radio, { size: iconSize }),
-        cfg.label
-      );
-    })()
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", flexWrap: "wrap" as const }}>
+      {type && (function() {
+        var cfg = TYPE_CONFIG[type];
+        if (!cfg) return null;
+        return (
+          <span key="type" style={{ ...base, background: cfg.bg, color: cfg.color, border: "1px solid " + cfg.border, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <cfg.Icon size={iconSize} />
+            {cfg.label}
+          </span>
+        );
+      })()}
+      {status && (function() {
+        var cfg = STATUS_CONFIG[status];
+        if (!cfg) return null;
+        return (
+          <span key="status" style={{ ...base, background: cfg.bg, color: cfg.color, border: "1px solid " + cfg.border, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            {status === "live" && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite", flexShrink: 0 }} />}
+            {cfg.label}
+          </span>
+        );
+      })()}
+    </span>
   );
 }
